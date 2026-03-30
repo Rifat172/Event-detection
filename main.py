@@ -8,8 +8,10 @@ import argparse
 # ПАРСИНГ АРГУМЕНТОВ КОМАНДНОЙ СТРОКИ
 parser = argparse.ArgumentParser(description="Скрипт обработки видео")
 parser.add_argument('--video', type=str, default='видео 2.mp4', help='Путь к видеофайлу')
+parser.add_argument('--headless', type=str, default='False', help='Режим без интерфейса')
 args = parser.parse_args()
 input_video_path = args.video # Путь к входному видео
+HEADLESS = args.headless == 'True' # Если True, не отображаем видео в реальном времени
 
 # КОНФИГУРАЦИЯ ПРОЕКТА
 
@@ -92,12 +94,17 @@ def is_person_at_table(box, tx, ty, tw, th, iou_threshold=0.15): # Функци�
     return inter_area / person_area > iou_threshold   # если >15% человека в зоне
 
 # ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ ВИДЕО
-cv2.namedWindow('Monitoring')
-cv2.createTrackbar('Pos', 'Monitoring', 0, total_frames, on_trackbar)
+
+if not HEADLESS:
+    cv2.namedWindow('Monitoring')
+    cv2.createTrackbar('Pos', 'Monitoring', 0, total_frames, on_trackbar)
+
 
 while True:
     current_frame = int(capture.get(cv2.CAP_PROP_POS_FRAMES))
-    cv2.setTrackbarPos('Pos', 'Monitoring', current_frame)
+    
+    if not HEADLESS:
+        cv2.setTrackbarPos('Pos', 'Monitoring', current_frame)
     
     ret, frame = capture.read()
     if not ret:
@@ -182,13 +189,17 @@ while True:
     
     # Сохраняем обработанный кадр в выходное видео и отображаем его
     out.write(frame)
-    cv2.imshow("Monitoring", frame)
-    
-    key = cv2.waitKey(1) & 0xFF
-    if key == ord('q'):
-        break
-    elif key == ord(' '):
-        cv2.waitKey(-1)
+    if not HEADLESS:
+        cv2.imshow("Monitoring", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+        elif key == ord(' '):
+            cv2.waitKey(-1)
+    else:
+        if current_frame % 500 == 0:   # каждые 500 кадров
+            print(f"Обработано: {current_frame}/{total_frames} кадров "
+                  f"({current_frame/total_frames*100:.1f}%)")
         
 # ФИНАЛЬНАЯ СТАТИСТИКА И СОХРАНЕНИЕ РЕЗУЛЬТАТОВ
 df = pd.DataFrame(events_log)
@@ -220,6 +231,7 @@ df.to_excel("table_stats.xlsx", index=False)
 # ЗАВЕРШЕНИЕ РАБОТЫ
 capture.release()
 out.release()
-cv2.destroyAllWindows()
+if not HEADLESS:
+    cv2.destroyAllWindows()
 
 print(f"\nВидео успешно сохранено в {output_video_path}")
